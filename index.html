@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personal Mailer</title>
+<style>
+:root { --bg:#f3f0ea; --ink:#1c1914; --muted:#6b655c; --line:#ddd6c8; --card:#fffdf8; --go:#1f6b4a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Georgia, "Times New Roman", serif; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+h1 { font-size: 28px; margin: 0 0 8px; font-weight: 700; }
+.sub { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); padding: 22px; }
+label { display: grid; gap: 6px; margin: 14px 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-family: Arial, sans-serif; }
+input, textarea, select { font: 15px Arial, sans-serif; padding: 10px; border: 1px solid var(--line); width: 100%; background: #fff; color: var(--ink); text-transform: none; letter-spacing: 0; }
+.row { display: grid; grid-template-columns: 1fr 140px; gap: 10px; align-items: end; }
+button { font: 700 13px Arial, sans-serif; border: 0; padding: 12px 16px; cursor: pointer; }
+.go { background: var(--go); color: #fff; }
+.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.log { margin-top: 18px; min-height: 72px; font: 13px Arial, sans-serif; color: var(--muted); white-space: pre-wrap; }
+.gate { max-width: 420px; margin: 12vh auto; padding: 0 20px; }
+.count { font: 12px Arial, sans-serif; color: var(--go); }
+.who { font: 13px Arial, sans-serif; color: var(--muted); }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <h1>Personal mailer</h1>
+  <p class="sub">3 accounts. Each person sends from their own Gmail.</p>
+  <div class="card">
+    <label>Login<input id="login" autocomplete="username" placeholder="you, friend, or boss"></label>
+    <label>Key<input id="key" type="password" autocomplete="current-password"></label>
+    <button class="go" type="button" id="unlock">Open</button>
+    <p class="log" id="gateLog"></p>
+  </div>
+</div>
+<div class="wrap hidden" id="app">
+  <h1>Personal mailer</h1>
+  <p class="sub who" id="who"></p>
+  <p class="sub">Max 50 people. Only send to people you know. {{name}} becomes their name.</p>
+  <div class="card">
+    <p class="log" id="ready">Checking Gmail…</p>
+    <div class="row">
+      <label>Saved templates
+        <select id="tplList"><option value="">New template</option></select>
+      </label>
+      <button class="ghost" type="button" id="saveTpl">Save template</button>
+    </div>
+    <label>Template name<input id="tplName" placeholder="Follow up"></label>
+    <label>From name<input id="fromName" placeholder="Your name"></label>
+    <label>Subject<input id="subject" placeholder="Hello"></label>
+    <label>Message<textarea id="body" rows="9" placeholder="Hello {{name}},&#10;&#10;Write your message."></textarea></label>
+    <label>Recipients (one per line). Optional name after a comma.
+      <textarea id="list" rows="9" placeholder="jane@gmail.com, Jane&#10;john@gmail.com"></textarea>
+    </label>
+    <p class="count" id="count">0 emails</p>
+    <div class="actions">
+      <button class="go" type="button" id="send">Send</button>
+      <button class="ghost" type="button" id="stop">Stop</button>
+      <button class="ghost" type="button" id="logout">Switch account</button>
+    </div>
+    <p class="log" id="log">Ready.</p>
+  </div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+function tkey() { return "personal-mailer-templates-" + (sessionStorage.getItem("mailer-login") || "x"); }
+let stopFlag = false;
+function login() { return sessionStorage.getItem("mailer-login") || ""; }
+function key() { return sessionStorage.getItem("mailer-key") || ""; }
+function templates() { try { return JSON.parse(localStorage.getItem(tkey()) || "[]"); } catch (_) { return []; } }
+function saveTemplates(list) { localStorage.setItem(tkey(), JSON.stringify(list)); }
+function parseList(text) {
+  return String(text || "").split(/\r?\n/).map((line) => {
+    const raw = line.trim();
+    if (!raw) return null;
+    const parts = raw.split(",");
+    const email = parts[0].trim().toLowerCase();
+    const name = parts.slice(1).join(",").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+    return { email, name };
+  }).filter(Boolean);
+}
+function fillTpl() {
+  const list = templates();
+  $("tplList").innerHTML = '<option value="">New template</option>' + list.map((t, i) => `<option value="${i}">${t.name}</option>`).join("");
+}
+async function api(path, opts = {}) {
+  const r = await fetch("/api/" + path, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      "x-mailer-login": login(),
+      "x-mailer-key": key(),
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+async function checkReady() {
+  try {
+    const data = await api("ready");
+    $("who").textContent = "Signed in as " + (data.name || login()) + " · " + (data.from || "");
+    $("ready").textContent = "This account sends from " + (data.from || "its own Gmail") + " only.";
+    if (data.name && !$("fromName").value) $("fromName").value = data.name;
+    return true;
+  } catch (e) {
+    $("ready").textContent = e.message;
+    return false;
+  }
+}
+$("unlock").onclick = async () => {
+  sessionStorage.setItem("mailer-login", $("login").value.trim().toLowerCase());
+  sessionStorage.setItem("mailer-key", $("key").value.trim());
+  try {
+    await api("ready");
+    $("gate").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    fillTpl();
+    checkReady();
+  } catch (e) {
+    $("gateLog").textContent = e.message;
+  }
+};
+$("logout").onclick = () => {
+  sessionStorage.removeItem("mailer-login");
+  sessionStorage.removeItem("mailer-key");
+  location.reload();
+};
+$("list").oninput = () => {
+  const n = parseList($("list").value).length;
+  $("count").textContent = n + " emails" + (n > 50 ? " (max 50, extra skipped)" : "");
+};
+$("saveTpl").onclick = () => {
+  const name = $("tplName").value.trim() || "Untitled";
+  const list = templates();
+  const i = $("tplList").value;
+  const item = { name, fromName: $("fromName").value, subject: $("subject").value, body: $("body").value };
+  if (i === "") list.push(item); else list[Number(i)] = item;
+  saveTemplates(list);
+  fillTpl();
+  $("log").textContent = "Template saved on this browser for this account.";
+};
+$("tplList").onchange = () => {
+  const i = $("tplList").value;
+  if (i === "") return;
+  const t = templates()[Number(i)];
+  if (!t) return;
+  $("tplName").value = t.name;
+  $("fromName").value = t.fromName || "";
+  $("subject").value = t.subject;
+  $("body").value = t.body;
+};
+$("stop").onclick = () => { stopFlag = true; };
+$("send").onclick = async () => {
+  const subject = $("subject").value.trim();
+  const body = $("body").value;
+  const fromName = $("fromName").value.trim();
+  let people = parseList($("list").value);
+  if (!subject || !body.trim()) return ($("log").textContent = "Add a subject and a message.");
+  if (!people.length) return ($("log").textContent = "Add at least one email.");
+  if (people.length > 50) people = people.slice(0, 50);
+  const ok = await checkReady();
+  if (!ok) return;
+  if (!confirm("Send to " + people.length + " people from this account's Gmail?")) return;
+  stopFlag = false;
+  $("send").disabled = true;
+  let sent = 0, fail = 0;
+  for (let i = 0; i < people.length; i++) {
+    if (stopFlag) { $("log").textContent = "Stopped. Sent " + sent + ", failed " + fail + "."; break; }
+    const p = people[i];
+    $("log").textContent = "Sending " + (i + 1) + "/" + people.length + " → " + p.email;
+    try {
+      await api("send", { method: "POST", body: JSON.stringify({ to: p.email, name: p.name, subject, body, fromName }) });
+      sent++;
+    } catch (e) {
+      fail++;
+      $("log").textContent = "Failed " + p.email + ": " + e.message + "\nSent " + sent + ", failed " + fail;
+      if (/Wrong login/i.test(e.message)) break;
+    }
+    await new Promise((res) => setTimeout(res, 1600));
+  }
+  if (!stopFlag) $("log").textContent = "Done. Sent " + sent + ", failed " + fail + ".";
+  $("send").disabled = false;
+};
+</script>
+</body>
+</html>

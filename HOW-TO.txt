@@ -1,0 +1,41 @@
+3 ACCOUNTS. New Netlify site. Not Smith. Not Render.
+
+Each person sends from THEIR own Gmail.
+Do not take anyone's normal Gmail password.
+Friend and boss each make their own 16-letter app password.
+
+NETLIFY ENVIRONMENT (Site configuration -> Environment variables)
+
+Account 1 (you)
+LOGIN1 = me
+KEY1 = (secret word only you know)
+NAME1 = Smith Michael
+GMAIL1 = yourgmail@gmail.com
+PASS1 = your 16-letter app password
+
+Account 2 (friend)
+LOGIN2 = friend
+KEY2 = (secret word for your friend)
+NAME2 = (friend's name)
+GMAIL2 = friend@gmail.com
+PASS2 = friend's 16-letter app password
+
+Account 3 (boss)
+LOGIN3 = boss
+KEY3 = (secret word for your boss)
+NAME3 = (boss's name)
+GMAIL3 = boss@gmail.com
+PASS3 = boss's 16-letter app password
+
+Do NOT send any of these to a chat.
+
+App password: that person opens Gmail on a computer -> Google Account -> Security -> 2-Step Verification ON -> App passwords -> Mail.
+
+Redeploy after saving.
+
+Login on the site with LOGIN + KEY.
+You cannot send as friend or boss unless you log in as them.
+They cannot send as you.
+
+Max 50 per account per 10 minutes.
+Only people they know.
